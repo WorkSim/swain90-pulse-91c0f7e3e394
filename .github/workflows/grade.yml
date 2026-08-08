@@ -1,0 +1,17 @@
+name: grade
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Restore grading config + tests from base (tamper-proof)
+        run: git checkout origin/${{ github.base_ref }} -- tests/grading package.json vitest.config.ts
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - run: npm ci
+      - name: Run grading suite
+        run: npm run test:grading
