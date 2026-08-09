@@ -107,7 +107,12 @@ export function reconcileIncoming(
   if (byClientIdIdx !== -1) {
     const next = messages.slice();
     next[byClientIdIdx] = incoming;
-    return next;
+    // Re-sort: the echo we just replaced was pending (seq null, sorted last),
+    // and its confirmation carries a seq that usually belongs earlier in the
+    // list — leaving it in place is what stranded a confirmed message at the
+    // end. Array.prototype.sort is stable, so pending messages keep their
+    // relative send order among themselves.
+    return next.sort(byServerOrder);
   }
 
   const byIdIdx = messages.findIndex((m) => m.id === incoming.id);
@@ -115,7 +120,9 @@ export function reconcileIncoming(
     return messages;
   }
 
-  return [...messages, incoming];
+  // Re-sort rather than trusting arrival order: under rapid sends a later
+  // message's response can resolve first, so append order is not server order.
+  return [...messages, incoming].sort(byServerOrder);
 }
 
 // ---------------------------------------------------------------------------
