@@ -151,6 +151,13 @@ export function applyIncoming(
   msg: { channelId: string },
   focusedChannelId: string | null
 ): UnreadState {
+  // The user is looking at this channel, so the message counts as already
+  // seen. Returning `state` itself (not a rebuilt copy) also keeps the
+  // "unchanged" contract literal — no key is created for a channel that has
+  // never accumulated anything, so `unread.general` stays absent rather than
+  // becoming an explicit 0.
+  if (msg.channelId === focusedChannelId) return state;
+
   const current = state.unread[msg.channelId] ?? 0;
   return {
     unread: { ...state.unread, [msg.channelId]: current + 1 },
