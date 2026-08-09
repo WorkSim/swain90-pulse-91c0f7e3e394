@@ -208,7 +208,26 @@ export function backfillOnReconnect(
   state: BackfillState,
   serverMessages: Message[]
 ): BackfillState {
-  // Resubscribes to live events only — does not request anything sent
-  // while disconnected, so the outage window is silently dropped.
-  return state;
+  // Everything the server knows that is past our cursor — this is the outage
+  // window. Filtering on seq (not on "is it in our list") is what makes the
+  // backfill gap-free: the client never saw these at all, so there is nothing
+  // local to compare them against.
+  const ahead = serverMessages.filter(
+    (m): m is Message & { seq: number } => m.seq !== null && m.seq > state.lastSeenSeq,
+  );
+  // Nothing past the cursor: genuinely no gap, so hand back the SAME object.
+  // Callers treat identity as "nothing happened" on a reconnect.
+  if (ahead.length === 0) return state;
+
+  // Defensive dedupe: the server may resend the boundary message. Keyed on id
+  // rather than seq because a re-delivery carries the same id.
+  const known = new Set(state.messages.map((m) => m.id));
+  const gap = ahead.filter((m) => !known.has(m.id)).sort(byServerOrder);
+
+  // Advance to the highest seq OBSERVED, computed over `ahead` rather than
+  // `gap`: a message we already held by id still proves the server is that far
+  // along, and dropping it from the cursor would re-request it every reconnect.
+  const lastSeenSeq = ahead.reduce((max, m) => Math.max(max, m.seq), state.lastSeenSeq);
+
+  return { messages: [...state.messages, ...gap], lastSeenSeq };
 }
